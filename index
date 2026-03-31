@@ -1,3 +1,15 @@
 qrtest/
+<head>
 <link rel="icon" type="image/png" href="./assets/icons/favicon.png" />
 <title>QR Check-in Web-App</title>
+<div style="display:flex; align-items:center; gap:16px; margin-bottom:24px; flex-wrap:wrap;">
+  <img
+    src="./assets/images/logo.png"
+    alt="Logo"
+    style="height:56px; width:auto; display:block;"
+  />
+  <div>
+    <div style="font-size:14px; color:#6b7280;">Browserbasierte Veranstaltungsplattform</div>
+    <div style="font-size:28px; font-weight:700; letter-spacing:-0.03em;">QR Check-in Web-App</div>
+  </div>
+</div>
