@@ -1,656 +1,1126 @@
-qrtest/
-import React, { useMemo, useState } from "react";
-
-const forumOptions = [
-  { id: "forum-1", title: "Fachforum 1 · Digitale Bildung" },
-  { id: "forum-2", title: "Fachforum 2 · Führung und Organisation" },
-  { id: "forum-3", title: "Fachforum 3 · Gesundheit und Arbeit" },
-  { id: "forum-4", title: "Fachforum 4 · KI und Verwaltung" },
-];
-
-const programOptions = [
-  { id: "prog-1", title: "Abendempfang" },
-  { id: "prog-2", title: "Stadtführung" },
-  { id: "prog-3", title: "Netzwerk-Dinner" },
-  { id: "prog-4", title: "Kulturprogramm" },
-  { id: "prog-5", title: "Abschlussrunde" },
-];
-
-const mealOptions = ["fleisch", "vegetarisch", "vegan"];
-
-const initialParticipants = [
-  {
-    id: "p1",
-    referenceNumber: "BZ-2026-001",
-    name: "Max Mustermann",
-    email: "max@example.org",
-    organization: "Beispiel GmbH",
-    status: "checked_in",
-    checkedInAt: "08:54",
-    mealPreference: "vegetarisch",
-    lunchPackage: true,
-    selectedForumId: "forum-1",
-    selectedProgramIds: ["prog-1", "prog-3"],
-  },
-  {
-    id: "p2",
-    referenceNumber: "BZ-2026-002",
-    name: "Sofia Becker",
-    email: "sofia@example.org",
-    organization: "KBW",
-    status: "pending",
-    checkedInAt: null,
-    mealPreference: "vegan",
-    lunchPackage: false,
-    selectedForumId: "forum-2",
-    selectedProgramIds: ["prog-2"],
-  },
-  {
-    id: "p3",
-    referenceNumber: "BZ-2026-003",
-    name: "Daniel Yilmaz",
-    email: "daniel@example.org",
-    organization: "Senatsverwaltung",
-    status: "pending",
-    checkedInAt: null,
-    mealPreference: "fleisch",
-    lunchPackage: true,
-    selectedForumId: null,
-    selectedProgramIds: [],
-  },
-  {
-    id: "p4",
-    referenceNumber: "BZ-2026-004",
-    name: "Laura König",
-    email: "laura@example.org",
-    organization: "Bildungspartner",
-    status: "checked_in",
-    checkedInAt: "09:07",
-    mealPreference: "vegetarisch",
-    lunchPackage: false,
-    selectedForumId: "forum-4",
-    selectedProgramIds: ["prog-4", "prog-5"],
-  },
-  {
-    id: "p5",
-    referenceNumber: "BZ-2026-005",
-    name: "Nina Hartmann",
-    email: "nina@example.org",
-    organization: "KBW",
-    status: "pending",
-    checkedInAt: null,
-    mealPreference: "vegan",
-    lunchPackage: false,
-    selectedForumId: "forum-3",
-    selectedProgramIds: ["prog-1"],
-  },
-];
-
-function formatNowTime() {
-  return new Date().toLocaleTimeString("de-DE", {
-    hour: "2-digit",
-    minute: "2-digit",
-  });
-}
-
-function calculateStats(participants) {
-  const total = participants.length;
-  const checkedIn = participants.filter((p) => p.status === "checked_in").length;
-  const pending = Math.max(total - checkedIn, 0);
-  const percent = total ? Math.round((checkedIn / total) * 100) : 0;
-  const lunchPackages = participants.filter((p) => p.lunchPackage).length;
-  const forumSelections = participants.filter((p) => p.selectedForumId).length;
-  const programSelections = participants.reduce((sum, p) => sum + p.selectedProgramIds.length, 0);
-  return { total, checkedIn, pending, percent, lunchPackages, forumSelections, programSelections };
-}
-
-function searchParticipants(participants, query) {
-  const q = query.trim().toLowerCase();
-  if (!q) return participants;
-  return participants.filter((p) =>
-    [p.name, p.email, p.organization, p.referenceNumber].some((value) =>
-      String(value || "").toLowerCase().includes(q)
-    )
-  );
-}
-
-function findParticipantByReference(participants, input) {
-  const normalized = input.trim().toLowerCase();
-  if (!normalized) return null;
-  return (
-    participants.find((p) => p.referenceNumber.toLowerCase() === normalized) ||
-    participants.find((p) => p.name.toLowerCase().includes(normalized)) ||
-    null
-  );
-}
-
-function getForumLabel(forumId) {
-  const forum = forumOptions.find((item) => item.id === forumId);
-  return forum ? forum.title : "Nicht ausgewählt";
-}
-
-function getProgramLabels(programIds) {
-  return programOptions.filter((item) => programIds.includes(item.id)).map((item) => item.title);
-}
-
-function runDiagnostics() {
-  const stats = calculateStats(initialParticipants);
-  const results = [];
-  results.push({ name: "Stats count total participants", ok: stats.total === 5 });
-  results.push({ name: "Stats count checked-in participants", ok: stats.checkedIn === 2 });
-  results.push({ name: "Search finds Sofia Becker", ok: searchParticipants(initialParticipants, "sofia").length === 1 });
-  results.push({ name: "Search empty query returns all", ok: searchParticipants(initialParticipants, "").length === initialParticipants.length });
-  results.push({ name: "Progress percentage is valid", ok: stats.percent >= 0 && stats.percent <= 100 });
-  results.push({ name: "Reference search finds participant", ok: findParticipantByReference(initialParticipants, "BZ-2026-003")?.name === "Daniel Yilmaz" });
-  results.push({ name: "Forum label resolves correctly", ok: getForumLabel("forum-2").includes("Fachforum 2") });
-  results.push({ name: "Program labels resolve correctly", ok: getProgramLabels(["prog-1", "prog-3"]).length === 2 });
-  return results;
-}
-
-function IconBox({ children }) {
-  return (
-    <div style={{ width: 38, height: 38, borderRadius: 14, border: "1px solid #d6d6d6", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 18, background: "#fff" }}>
-      {children}
-    </div>
-  );
-}
-
-function Card({ children, style }) {
-  return (
-    <div style={{ background: "#fff", border: "1px solid #e5e5e5", borderRadius: 24, boxShadow: "0 1px 2px rgba(16,24,40,0.04)", ...style }}>
-      {children}
-    </div>
-  );
-}
-
-function Button({ children, onClick, disabled = false, secondary = false }) {
-  return (
-    <button
-      onClick={onClick}
-      disabled={disabled}
-      style={{
-        border: secondary ? "1px solid #d5d7da" : "1px solid #111827",
-        background: disabled ? "#f3f4f6" : secondary ? "#fff" : "#111827",
-        color: disabled ? "#9ca3af" : secondary ? "#111827" : "#fff",
-        borderRadius: 14,
-        padding: "10px 14px",
-        fontSize: 14,
-        fontWeight: 600,
-        cursor: disabled ? "not-allowed" : "pointer",
-      }}
-    >
-      {children}
-    </button>
-  );
-}
-
-function Input({ value, onChange, placeholder }) {
-  return <input value={value} onChange={onChange} placeholder={placeholder} style={{ width: "100%", border: "1px solid #d5d7da", borderRadius: 14, padding: "12px 14px", fontSize: 14, outline: "none", boxSizing: "border-box", background: "#fff" }} />;
-}
-
-function Badge({ children, variant = "default" }) {
-  const styles = {
-    default: { background: "#111827", color: "#fff", border: "1px solid #111827" },
-    secondary: { background: "#f3f4f6", color: "#111827", border: "1px solid #e5e7eb" },
-    outline: { background: "#fff", color: "#111827", border: "1px solid #d1d5db" },
-  };
-  return <span style={{ display: "inline-flex", alignItems: "center", borderRadius: 999, padding: "6px 10px", fontSize: 12, fontWeight: 600, ...styles[variant] }}>{children}</span>;
-}
-
-function ProgressBar({ value }) {
-  return (
-    <div style={{ width: "100%", height: 12, background: "#eceff3", borderRadius: 999, overflow: "hidden" }}>
-      <div style={{ width: `${Math.max(0, Math.min(100, value))}%`, height: "100%", background: "#111827", borderRadius: 999 }} />
-    </div>
-  );
-}
-
-function StatusBadge({ status }) {
-  if (status === "checked_in") return <Badge>Eingecheckt</Badge>;
-  if (status === "duplicate") return <Badge variant="secondary">Doppelter Versuch</Badge>;
-  return <Badge variant="outline">Offen</Badge>;
-}
-
-function StatCard({ title, value, icon, subline }) {
-  return (
-    <Card>
-      <div style={{ padding: 20 }}>
-        <div style={{ display: "flex", justifyContent: "space-between", gap: 16, alignItems: "flex-start" }}>
-          <div>
-            <div style={{ fontSize: 14, color: "#6b7280" }}>{title}</div>
-            <div style={{ marginTop: 8, fontSize: 32, fontWeight: 700, letterSpacing: "-0.03em" }}>{value}</div>
-            <div style={{ marginTop: 8, fontSize: 14, color: "#6b7280", lineHeight: 1.5 }}>{subline}</div>
-          </div>
-          <IconBox>{icon}</IconBox>
-        </div>
-      </div>
-    </Card>
-  );
-}
-
-function SectionHeader({ eyebrow, title, text }) {
-  return (
-    <div>
-      {eyebrow ? <div style={{ display: "inline-flex", alignItems: "center", gap: 8, border: "1px solid #d5d7da", borderRadius: 999, padding: "8px 12px", color: "#6b7280", fontSize: 14, background: "#fff" }}><span>{eyebrow}</span></div> : null}
-      <h1 style={{ margin: "16px 0 0", fontSize: 48, lineHeight: 1.05, letterSpacing: "-0.04em" }}>{title}</h1>
-      <p style={{ margin: "16px 0 0", maxWidth: 860, fontSize: 18, lineHeight: 1.7, color: "#6b7280" }}>{text}</p>
-    </div>
-  );
-}
-
-function RoleSwitch({ role, setRole }) {
-  return (
-    <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-      <button onClick={() => setRole("admin")} style={{ border: role === "admin" ? "1px solid #111827" : "1px solid #d5d7da", background: role === "admin" ? "#111827" : "#fff", color: role === "admin" ? "#fff" : "#111827", borderRadius: 14, padding: "10px 14px", fontSize: 14, fontWeight: 600, cursor: "pointer" }}>Admin-Ansicht</button>
-      <button onClick={() => setRole("participant")} style={{ border: role === "participant" ? "1px solid #111827" : "1px solid #d5d7da", background: role === "participant" ? "#111827" : "#fff", color: role === "participant" ? "#fff" : "#111827", borderRadius: 14, padding: "10px 14px", fontSize: 14, fontWeight: 600, cursor: "pointer" }}>Teilnehmendenansicht</button>
-    </div>
-  );
-}
-
-function DashboardTab({ participants }) {
-  const { total, checkedIn, pending, percent, lunchPackages, forumSelections, programSelections } = calculateStats(participants);
-  return (
-    <div style={{ display: "grid", gap: 24 }}>
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 16 }}>
-        <StatCard title="Teilnehmende gesamt" value={total} icon="👥" subline="Importierte Datensätze für das Event" />
-        <StatCard title="Bereits eingecheckt" value={checkedIn} icon="✅" subline="Live-Status am Einlass" />
-        <StatCard title="Noch offen" value={pending} icon="🔳" subline="Noch nicht bestätigte Teilnahmen" />
-        <StatCard title="Lunchpakete" value={lunchPackages} icon="🥪" subline="Aktuelle Auswahl der Teilnehmenden" />
-        <StatCard title="Fachforen" value={forumSelections} icon="🧩" subline="Verbindlich gewählte Foren" />
-        <StatCard title="Programmpunkte" value={programSelections} icon="📅" subline="Gebuchte Punkte im Rahmenprogramm" />
-      </div>
-      <Card>
-        <div style={{ padding: 24 }}>
-          <div style={{ fontSize: 22, fontWeight: 700, letterSpacing: "-0.02em" }}>Check-in-Fortschritt</div>
-          <div style={{ marginTop: 20, display: "flex", justifyContent: "space-between", fontSize: 14 }}>
-            <span style={{ color: "#6b7280" }}>Verbindlich erfasste Anwesenheiten</span>
-            <span style={{ fontWeight: 600 }}>{percent}%</span>
-          </div>
-          <div style={{ marginTop: 10 }}><ProgressBar value={percent} /></div>
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 16, marginTop: 20 }}>
-            <div style={{ border: "1px solid #e5e7eb", borderRadius: 20, padding: 16 }}><div style={{ fontSize: 14, color: "#6b7280" }}>Self-Service</div><div style={{ marginTop: 8, fontWeight: 600 }}>Änderungen per Bezugsnummer oder Token</div></div>
-            <div style={{ border: "1px solid #e5e7eb", borderRadius: 20, padding: 16 }}><div style={{ fontSize: 14, color: "#6b7280" }}>Verpflegung</div><div style={{ marginTop: 8, fontWeight: 600 }}>Fleisch, vegetarisch, vegan und Lunchpaket</div></div>
-            <div style={{ border: "1px solid #e5e7eb", borderRadius: 20, padding: 16 }}><div style={{ fontSize: 14, color: "#6b7280" }}>Buchungslogik</div><div style={{ marginTop: 8, fontWeight: 600 }}>1 Fachforum, bis zu 5 Programmpunkte</div></div>
-            <div style={{ border: "1px solid #e5e7eb", borderRadius: 20, padding: 16 }}><div style={{ fontSize: 14, color: "#6b7280" }}>Export</div><div style={{ marginTop: 8, fontWeight: 600 }}>CSV / XLSX / PDF Anwesenheitsliste</div></div>
-          </div>
-        </div>
-      </Card>
-    </div>
-  );
-}
-
-function ParticipantsTab({ participants, setParticipants }) {
-  const [query, setQuery] = useState("");
-  const filtered = useMemo(() => searchParticipants(participants, query), [participants, query]);
-  const manualCheckin = (id) => {
-    setParticipants((current) => current.map((participant) => participant.id === id ? { ...participant, status: "checked_in", checkedInAt: formatNowTime() } : participant));
-  };
-  return (
-    <Card>
-      <div style={{ padding: 24 }}>
-        <div style={{ display: "flex", justifyContent: "space-between", gap: 16, alignItems: "center", flexWrap: "wrap" }}>
-          <div>
-            <div style={{ fontSize: 22, fontWeight: 700, letterSpacing: "-0.02em" }}>Teilnehmerliste</div>
-            <div style={{ marginTop: 6, fontSize: 14, color: "#6b7280" }}>Suche, Statusprüfung und manueller Fallback am Einlass</div>
-          </div>
-          <div style={{ minWidth: 280, flex: "1 1 320px", maxWidth: 360 }}><Input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Name, E-Mail, Organisation oder Bezugsnummer" /></div>
-        </div>
-        <div style={{ marginTop: 20, overflowX: "auto", border: "1px solid #e5e7eb", borderRadius: 20 }}>
-          <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 900 }}>
-            <thead><tr style={{ textAlign: "left", background: "#fafafa" }}><th style={thStyle}>Bezugsnummer</th><th style={thStyle}>Name</th><th style={thStyle}>Organisation</th><th style={thStyle}>Verpflegung</th><th style={thStyle}>Status</th><th style={thStyle}>Zeit</th><th style={{ ...thStyle, textAlign: "right" }}>Aktion</th></tr></thead>
-            <tbody>
-              {filtered.map((participant) => (
-                <tr key={participant.id} style={{ borderTop: "1px solid #f0f0f0" }}>
-                  <td style={tdStyle}><div style={{ fontWeight: 600 }}>{participant.referenceNumber}</div></td>
-                  <td style={tdStyle}><div style={{ fontWeight: 600 }}>{participant.name}</div><div style={{ fontSize: 14, color: "#6b7280", marginTop: 4 }}>{participant.email}</div></td>
-                  <td style={tdStyle}>{participant.organization}</td>
-                  <td style={tdStyle}>{participant.mealPreference}{participant.lunchPackage ? " · Lunchpaket" : ""}</td>
-                  <td style={tdStyle}><StatusBadge status={participant.status} /></td>
-                  <td style={tdStyle}>{participant.checkedInAt || "—"}</td>
-                  <td style={{ ...tdStyle, textAlign: "right" }}><Button secondary={participant.status === "checked_in"} disabled={participant.status === "checked_in"} onClick={() => manualCheckin(participant.id)}>{participant.status === "checked_in" ? "Erfasst" : "Manuell einchecken"}</Button></td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </div>
-    </Card>
-  );
-}
-
-function ApiCard({ title, endpoint }) {
-  return <div style={{ border: "1px solid #e5e7eb", borderRadius: 20, padding: 16 }}><div style={{ fontWeight: 600 }}>{title}</div><div style={{ marginTop: 8, fontFamily: "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace", fontSize: 12, color: "#6b7280", wordBreak: "break-word" }}>{endpoint}</div></div>;
-}
-
-function FeedbackBox({ type, text }) {
-  return <div style={{ marginTop: 16, border: "1px solid #e5e7eb", borderRadius: 20, padding: 16, fontSize: 14, background: type === "success" ? "#ecfdf3" : type === "warning" ? "#fffaeb" : "#fef3f2" }}>{text}</div>;
-}
-
-function DiagnosticsTab() {
-  const results = runDiagnostics();
-  const passed = results.filter((item) => item.ok).length;
-  return (
-    <Card>
-      <div style={{ padding: 24 }}>
-        <div style={{ fontSize: 22, fontWeight: 700, letterSpacing: "-0.02em" }}>Diagnose</div>
-        <div style={{ marginTop: 6, fontSize: 14, color: "#6b7280" }}>Kleine Laufzeitprüfungen für Statistik- und Suchlogik</div>
-        <div style={{ marginTop: 16, fontSize: 14, fontWeight: 600 }}>{passed} / {results.length} Checks erfolgreich</div>
-        <div style={{ display: "grid", gap: 10, marginTop: 16 }}>
-          {results.map((result) => <div key={result.name} style={{ display: "flex", justifyContent: "space-between", gap: 16, border: "1px solid #e5e7eb", borderRadius: 16, padding: 14, background: result.ok ? "#ecfdf3" : "#fef3f2" }}><span>{result.name}</span><strong>{result.ok ? "OK" : "Fehler"}</strong></div>)}
-        </div>
-      </div>
-    </Card>
-  );
-}
-
-function AdminApp({ participants, setParticipants }) {
-  const [activeTab, setActiveTab] = useState("dashboard");
-  const { total, checkedIn, percent } = calculateStats(participants);
-  const tabs = [{ id: "dashboard", label: "Dashboard" }, { id: "participants", label: "Teilnehmer" }, { id: "diagnostics", label: "Diagnose" }];
-  return (
-    <div style={{ display: "grid", gap: 24 }}>
-      <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 1.3fr) minmax(300px, 0.7fr)", gap: 24, alignItems: "end" }}>
-        <SectionHeader eyebrow="🔳 Admin-Portal" title="Steuerung und Übersicht für Veranstaltungsorganisation" text="Verwalten Sie Teilnehmende, Check-ins, Fachforen, Programmpunkte und Verpflegungswünsche zentral in einer Oberfläche." />
-        <Card><div style={{ padding: 20 }}><div style={{ fontSize: 14, color: "#6b7280" }}>Live-Status ATagung 2026</div><div style={{ marginTop: 8, fontSize: 32, fontWeight: 700, letterSpacing: "-0.03em" }}>{checkedIn} / {total}</div><div style={{ marginTop: 12 }}><ProgressBar value={percent} /></div><div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginTop: 16 }}><Button>Export</Button><Button secondary>QR-Links erzeugen</Button></div></div></Card>
-      </div>
-      <div style={{ display: "flex", flexWrap: "wrap", gap: 10 }}>{tabs.map((tab) => { const isActive = activeTab === tab.id; return <button key={tab.id} onClick={() => setActiveTab(tab.id)} style={{ border: isActive ? "1px solid #111827" : "1px solid #d5d7da", background: isActive ? "#111827" : "#fff", color: isActive ? "#fff" : "#111827", borderRadius: 14, padding: "10px 14px", fontSize: 14, fontWeight: 600, cursor: "pointer" }}>{tab.label}</button>; })}</div>
-      {activeTab === "dashboard" && <DashboardTab participants={participants} />}
-      {activeTab === "participants" && <ParticipantsTab participants={participants} setParticipants={setParticipants} />}
-      {activeTab === "diagnostics" && <DiagnosticsTab />}
-    </div>
-  );
-}
-
-function ParticipantApp({ participants, setParticipants }) {
-  const { checkedIn, total } = calculateStats(participants);
-  const [mode, setMode] = useState("pre_event");
-  const [step, setStep] = useState("identify");
-  const [lookup, setLookup] = useState("");
-  const [currentParticipant, setCurrentParticipant] = useState(null);
-  const [flowMessage, setFlowMessage] = useState(null);
-
-  const syncParticipant = (nextParticipant) => {
-    setCurrentParticipant(nextParticipant);
-    setParticipants((current) => current.map((item) => (item.id === nextParticipant.id ? nextParticipant : item)));
-  };
-
-  const openParticipantFlow = () => {
-    const match = findParticipantByReference(participants, lookup);
-    if (!match) {
-      setCurrentParticipant(null);
-      setFlowMessage({ type: "error", text: "Keine passende Bezugsnummer oder kein passender Token gefunden." });
-      return;
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>QR Check-in Web-App</title>
+  <style>
+    :root {
+      --bg: #f7f7f8;
+      --card: #ffffff;
+      --text: #111827;
+      --muted: #6b7280;
+      --border: #e5e7eb;
+      --border-strong: #d5d7da;
+      --primary: #111827;
+      --success-bg: #ecfdf3;
+      --warning-bg: #fffaeb;
+      --error-bg: #fef3f2;
+      --shadow: 0 1px 2px rgba(16, 24, 40, 0.04);
+      --radius-xl: 24px;
+      --radius-lg: 18px;
+      --radius-md: 14px;
+      --max-width: 1280px;
     }
-    setCurrentParticipant(match);
-    setFlowMessage(null);
-    if (mode === "pre_event") {
-      setStep("selection");
-    } else {
-      setStep(match.status === "checked_in" ? "confirmation" : "checkin");
+
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: var(--bg);
+      color: var(--text);
     }
-  };
 
-  const confirmCheckin = () => {
-    if (!currentParticipant) return;
-    if (currentParticipant.status === "checked_in") {
-      setStep("confirmation");
-      return;
+    .app {
+      min-height: 100vh;
+      padding: 24px;
     }
-    const nowTime = formatNowTime();
-    const updated = { ...currentParticipant, status: "checked_in", checkedInAt: nowTime };
-    syncParticipant(updated);
-    setFlowMessage({ type: "success", text: `Anwesenheit erfolgreich bestätigt für ${updated.name}.` });
-    setStep("confirmation");
-  };
 
-  const updateCurrentParticipant = (updater) => {
-    if (!currentParticipant) return;
-    const next = updater(currentParticipant);
-    syncParticipant(next);
-  };
-
-  const toggleProgramForCurrent = (programId) => {
-    if (!currentParticipant) return;
-    const exists = currentParticipant.selectedProgramIds.includes(programId);
-    const nextProgramIds = exists ? currentParticipant.selectedProgramIds.filter((id) => id !== programId) : [...currentParticipant.selectedProgramIds, programId];
-    if (nextProgramIds.length > 5) {
-      setFlowMessage({ type: "warning", text: "Es können maximal 5 Programmpunkte ausgewählt werden." });
-      return;
+    .container {
+      max-width: var(--max-width);
+      margin: 0 auto;
+      display: grid;
+      gap: 24px;
     }
-    setFlowMessage(null);
-    updateCurrentParticipant((current) => ({ ...current, selectedProgramIds: nextProgramIds }));
-  };
 
-  const saveSelection = () => {
-    if (!currentParticipant) return;
-    setFlowMessage({ type: "success", text: mode === "pre_event" ? "Ihre Vorabauswahl wurde gespeichert." : "Ihre Auswahl wurde gespeichert." });
-    setStep(mode === "pre_event" ? "pre_event_done" : "confirmation");
-  };
+    .card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-xl);
+      box-shadow: var(--shadow);
+    }
 
-  const restartFlow = () => {
-    setLookup("");
-    setCurrentParticipant(null);
-    setFlowMessage(null);
-    setStep("identify");
-  };
+    .card-body { padding: 24px; }
+    .card-body-sm { padding: 20px; }
 
-  const switchMode = (nextMode) => {
-    setMode(nextMode);
-    setLookup("");
-    setCurrentParticipant(null);
-    setFlowMessage(null);
-    setStep("identify");
-  };
+    .pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      border: 1px solid var(--border-strong);
+      border-radius: 999px;
+      padding: 8px 12px;
+      color: var(--muted);
+      font-size: 14px;
+      background: #fff;
+    }
 
-  const steps = mode === "pre_event"
-    ? [
-        { id: "identify", label: "1. Identifikation" },
-        { id: "selection", label: "2. Auswahl vorab" },
-        { id: "pre_event_done", label: "3. Bestätigung" },
-      ]
-    : [
-        { id: "identify", label: "1. Identifikation" },
-        { id: "checkin", label: "2. Check-in" },
-        { id: "confirmation", label: "3. Bestätigung" },
+    h1 {
+      margin: 16px 0 0;
+      font-size: clamp(34px, 5vw, 48px);
+      line-height: 1.05;
+      letter-spacing: -0.04em;
+    }
+
+    h2 {
+      margin: 0;
+      font-size: 22px;
+      letter-spacing: -0.02em;
+    }
+
+    p.lead {
+      margin: 16px 0 0;
+      max-width: 860px;
+      font-size: 18px;
+      line-height: 1.7;
+      color: var(--muted);
+    }
+
+    .muted { color: var(--muted); }
+    .small { font-size: 14px; }
+    .mono {
+      margin-top: 8px;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+      font-size: 12px;
+      color: var(--muted);
+      word-break: break-word;
+    }
+
+    .row, .row-between {
+      display: flex;
+      gap: 12px;
+      flex-wrap: wrap;
+      align-items: center;
+    }
+
+    .row-between { justify-content: space-between; }
+
+    .btn {
+      border: 1px solid var(--primary);
+      background: var(--primary);
+      color: #fff;
+      border-radius: var(--radius-md);
+      padding: 10px 14px;
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+    }
+
+    .btn.secondary {
+      border-color: var(--border-strong);
+      background: #fff;
+      color: var(--text);
+    }
+
+    .btn:disabled {
+      background: #f3f4f6;
+      color: #9ca3af;
+      border-color: #e5e7eb;
+      cursor: not-allowed;
+    }
+
+    .segmented {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+
+    .segmented button,
+    .tabs button {
+      border: 1px solid var(--border-strong);
+      background: #fff;
+      color: var(--text);
+      border-radius: var(--radius-md);
+      padding: 10px 14px;
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+    }
+
+    .segmented button.active,
+    .tabs button.active {
+      border-color: var(--primary);
+      background: var(--primary);
+      color: #fff;
+    }
+
+    .grid-header-admin,
+    .grid-header-participant {
+      display: grid;
+      gap: 24px;
+      align-items: end;
+    }
+
+    .grid-header-admin { grid-template-columns: minmax(0, 1.3fr) minmax(300px, 0.7fr); }
+    .grid-header-participant { grid-template-columns: minmax(0, 1.1fr) minmax(300px, 0.9fr); }
+
+    .stats-grid,
+    .info-grid,
+    .steps-grid,
+    .two-col-grid {
+      display: grid;
+      gap: 16px;
+    }
+
+    .stats-grid { grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); }
+    .info-grid { grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); }
+    .steps-grid { grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; }
+    .two-col-grid { grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 24px; }
+
+    .stat-card-head {
+      display: flex;
+      justify-content: space-between;
+      gap: 16px;
+      align-items: flex-start;
+    }
+
+    .stat-value {
+      margin-top: 8px;
+      font-size: 32px;
+      font-weight: 700;
+      letter-spacing: -0.03em;
+    }
+
+    .icon-box {
+      width: 38px;
+      height: 38px;
+      border-radius: 14px;
+      border: 1px solid #d6d6d6;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 18px;
+      background: #fff;
+    }
+
+    .progress-track {
+      width: 100%;
+      height: 12px;
+      background: #eceff3;
+      border-radius: 999px;
+      overflow: hidden;
+      margin-top: 10px;
+    }
+
+    .progress-fill {
+      height: 100%;
+      background: var(--primary);
+      border-radius: 999px;
+    }
+
+    .box {
+      border: 1px solid var(--border);
+      border-radius: 20px;
+      padding: 16px;
+      background: #fff;
+    }
+
+    .box-lg {
+      border: 1px solid var(--border);
+      border-radius: 20px;
+      padding: 20px;
+      background: #fff;
+    }
+
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      border-radius: 999px;
+      padding: 6px 10px;
+      font-size: 12px;
+      font-weight: 600;
+      border: 1px solid var(--primary);
+      background: var(--primary);
+      color: #fff;
+    }
+
+    .badge.outline {
+      background: #fff;
+      color: var(--text);
+      border-color: #d1d5db;
+    }
+
+    .badge.secondary {
+      background: #f3f4f6;
+      color: var(--text);
+      border-color: #e5e7eb;
+    }
+
+    .feedback {
+      margin-top: 16px;
+      border: 1px solid var(--border);
+      border-radius: 20px;
+      padding: 16px;
+      font-size: 14px;
+    }
+
+    .feedback.success { background: var(--success-bg); }
+    .feedback.warning { background: var(--warning-bg); }
+    .feedback.error { background: var(--error-bg); }
+
+    input[type="text"],
+    input[type="search"] {
+      width: 100%;
+      border: 1px solid var(--border-strong);
+      border-radius: 14px;
+      padding: 12px 14px;
+      font-size: 14px;
+      outline: none;
+      background: #fff;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      min-width: 900px;
+    }
+
+    th {
+      text-align: left;
+      padding: 14px 16px;
+      font-size: 13px;
+      color: var(--muted);
+      font-weight: 600;
+      background: #fafafa;
+    }
+
+    td {
+      padding: 16px;
+      vertical-align: top;
+      font-size: 14px;
+      border-top: 1px solid #f0f0f0;
+    }
+
+    .table-wrap {
+      margin-top: 20px;
+      overflow-x: auto;
+      border: 1px solid var(--border);
+      border-radius: 20px;
+    }
+
+    .option-row {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 10px 12px;
+      border: 1px solid var(--border);
+      border-radius: 14px;
+    }
+
+    .steps-grid .step {
+      border: 1px solid var(--border);
+      background: #fff;
+      color: var(--text);
+      border-radius: 18px;
+      padding: 14px;
+      font-size: 14px;
+      font-weight: 600;
+    }
+
+    .steps-grid .step.current {
+      border-color: var(--primary);
+      background: var(--primary);
+      color: #fff;
+    }
+
+    .steps-grid .step.done { background: #f3f4f6; }
+
+    @media (max-width: 960px) {
+      .grid-header-admin,
+      .grid-header-participant {
+        grid-template-columns: 1fr;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <div class="container">
+      <div id="role-switch" class="segmented"></div>
+      <div id="app-root"></div>
+    </div>
+  </div>
+
+  <script>
+    const forumOptions = [
+      { id: "forum-1", title: "Fachforum 1 · Digitale Bildung" },
+      { id: "forum-2", title: "Fachforum 2 · Führung und Organisation" },
+      { id: "forum-3", title: "Fachforum 3 · Gesundheit und Arbeit" },
+      { id: "forum-4", title: "Fachforum 4 · KI und Verwaltung" },
+    ];
+
+    const programOptions = [
+      { id: "prog-1", title: "Abendempfang" },
+      { id: "prog-2", title: "Stadtführung" },
+      { id: "prog-3", title: "Netzwerk-Dinner" },
+      { id: "prog-4", title: "Kulturprogramm" },
+      { id: "prog-5", title: "Abschlussrunde" },
+    ];
+
+    const mealOptions = ["fleisch", "vegetarisch", "vegan"];
+
+    const state = {
+      role: "admin",
+      adminTab: "dashboard",
+      participantMode: "pre_event",
+      participantStep: "identify",
+      participantLookup: "",
+      participantCurrentId: null,
+      participantMessage: null,
+      participantSearch: "",
+      participants: [
+        {
+          id: "p1",
+          referenceNumber: "BZ-2026-001",
+          name: "Max Mustermann",
+          email: "max@example.org",
+          organization: "Beispiel GmbH",
+          status: "checked_in",
+          checkedInAt: "08:54",
+          mealPreference: "vegetarisch",
+          lunchPackage: true,
+          selectedForumId: "forum-1",
+          selectedProgramIds: ["prog-1", "prog-3"],
+        },
+        {
+          id: "p2",
+          referenceNumber: "BZ-2026-002",
+          name: "Sofia Becker",
+          email: "sofia@example.org",
+          organization: "KBW",
+          status: "pending",
+          checkedInAt: null,
+          mealPreference: "vegan",
+          lunchPackage: false,
+          selectedForumId: "forum-2",
+          selectedProgramIds: ["prog-2"],
+        },
+        {
+          id: "p3",
+          referenceNumber: "BZ-2026-003",
+          name: "Daniel Yilmaz",
+          email: "daniel@example.org",
+          organization: "Senatsverwaltung",
+          status: "pending",
+          checkedInAt: null,
+          mealPreference: "fleisch",
+          lunchPackage: true,
+          selectedForumId: null,
+          selectedProgramIds: [],
+        },
+        {
+          id: "p4",
+          referenceNumber: "BZ-2026-004",
+          name: "Laura König",
+          email: "laura@example.org",
+          organization: "Bildungspartner",
+          status: "checked_in",
+          checkedInAt: "09:07",
+          mealPreference: "vegetarisch",
+          lunchPackage: false,
+          selectedForumId: "forum-4",
+          selectedProgramIds: ["prog-4", "prog-5"],
+        },
+        {
+          id: "p5",
+          referenceNumber: "BZ-2026-005",
+          name: "Nina Hartmann",
+          email: "nina@example.org",
+          organization: "KBW",
+          status: "pending",
+          checkedInAt: null,
+          mealPreference: "vegan",
+          lunchPackage: false,
+          selectedForumId: "forum-3",
+          selectedProgramIds: ["prog-1"],
+        },
+      ],
+    };
+
+    function formatNowTime() {
+      return new Date().toLocaleTimeString("de-DE", { hour: "2-digit", minute: "2-digit" });
+    }
+
+    function calculateStats(participants) {
+      const total = participants.length;
+      const checkedIn = participants.filter((p) => p.status === "checked_in").length;
+      const pending = Math.max(total - checkedIn, 0);
+      const percent = total ? Math.round((checkedIn / total) * 100) : 0;
+      const lunchPackages = participants.filter((p) => p.lunchPackage).length;
+      const forumSelections = participants.filter((p) => p.selectedForumId).length;
+      const programSelections = participants.reduce((sum, p) => sum + p.selectedProgramIds.length, 0);
+      return { total, checkedIn, pending, percent, lunchPackages, forumSelections, programSelections };
+    }
+
+    function searchParticipants(participants, query) {
+      const q = query.trim().toLowerCase();
+      if (!q) return participants;
+      return participants.filter((p) =>
+        [p.name, p.email, p.organization, p.referenceNumber].some((value) =>
+          String(value || "").toLowerCase().includes(q)
+        )
+      );
+    }
+
+    function findParticipantByReference(participants, input) {
+      const normalized = input.trim().toLowerCase();
+      if (!normalized) return null;
+      return (
+        participants.find((p) => p.referenceNumber.toLowerCase() === normalized) ||
+        participants.find((p) => p.name.toLowerCase().includes(normalized)) ||
+        null
+      );
+    }
+
+    function getParticipantById(id) {
+      return state.participants.find((p) => p.id === id) || null;
+    }
+
+    function updateParticipant(id, updater) {
+      state.participants = state.participants.map((p) => (p.id === id ? updater({ ...p }) : p));
+    }
+
+    function getForumLabel(forumId) {
+      const forum = forumOptions.find((item) => item.id === forumId);
+      return forum ? forum.title : "Nicht ausgewählt";
+    }
+
+    function getProgramLabels(programIds) {
+      return programOptions.filter((item) => programIds.includes(item.id)).map((item) => item.title);
+    }
+
+    function statusBadge(status) {
+      if (status === "checked_in") return '<span class="badge">Eingecheckt</span>';
+      if (status === "duplicate") return '<span class="badge secondary">Doppelter Versuch</span>';
+      return '<span class="badge outline">Offen</span>';
+    }
+
+    function feedbackBox(message) {
+      if (!message) return "";
+      return `<div class="feedback ${message.type}">${escapeHtml(message.text)}</div>`;
+    }
+
+    function statCard(title, value, icon, subline) {
+      return `
+        <div class="card">
+          <div class="card-body-sm">
+            <div class="stat-card-head">
+              <div>
+                <div class="small muted">${title}</div>
+                <div class="stat-value">${value}</div>
+                <div class="small muted" style="margin-top: 8px; line-height: 1.5;">${subline}</div>
+              </div>
+              <div class="icon-box">${icon}</div>
+            </div>
+          </div>
+        </div>
+      `;
+    }
+
+    function apiCard(title, endpoint) {
+      return `<div class="box"><div style="font-weight:600;">${title}</div><div class="mono">${escapeHtml(endpoint)}</div></div>`;
+    }
+
+    function sectionHeader(eyebrow, title, text) {
+      return `
+        <div>
+          ${eyebrow ? `<div class="pill"><span>${eyebrow}</span></div>` : ""}
+          <h1>${title}</h1>
+          <p class="lead">${text}</p>
+        </div>
+      `;
+    }
+
+    function renderRoleSwitch() {
+      const root = document.getElementById("role-switch");
+      root.innerHTML = `
+        <button class="${state.role === "admin" ? "active" : ""}" data-role="admin">Admin-Ansicht</button>
+        <button class="${state.role === "participant" ? "active" : ""}" data-role="participant">Teilnehmendenansicht</button>
+      `;
+      root.querySelectorAll("button").forEach((btn) => {
+        btn.addEventListener("click", () => {
+          state.role = btn.dataset.role;
+          render();
+        });
+      });
+    }
+
+    function renderAdminApp() {
+      const stats = calculateStats(state.participants);
+      const tabs = [
+        { id: "dashboard", label: "Dashboard" },
+        { id: "participants", label: "Teilnehmer" },
+        { id: "diagnostics", label: "Diagnose" },
       ];
 
-  return (
-    <div style={{ display: "grid", gap: 24 }}>
-      <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 1.1fr) minmax(300px, 0.9fr)", gap: 24, alignItems: "end" }}>
-        <SectionHeader
-          eyebrow="🎟️ Teilnehmendenportal"
-          title={mode === "pre_event" ? "Vorab-Auswahl für Fachforen, Programm und Verpflegung" : "Schneller Check-in am Veranstaltungstag"}
-          text={mode === "pre_event"
-            ? "Sechs Wochen vor der Tagung wählen Teilnehmende ihr Fachforum, Rahmenprogramm und ihre Verpflegung. Der Check-in erfolgt erst separat am Veranstaltungstag."
-            : "Am Veranstaltungstag bestätigen Teilnehmende nur noch ihre Anwesenheit. Bereits gespeicherte Vorabauswahlen bleiben dabei erhalten."}
-        />
-        <Card>
-          <div style={{ padding: 20 }}>
-            <div style={{ fontSize: 14, color: "#6b7280" }}>Portalstatus</div>
-            <div style={{ marginTop: 8, fontSize: 32, fontWeight: 700, letterSpacing: "-0.03em" }}>
-              {mode === "pre_event" ? "Vorab offen" : "Check-in offen"}
-            </div>
-            <div style={{ marginTop: 8, fontSize: 14, color: "#6b7280", lineHeight: 1.6 }}>
-              Bereits {checkedIn} von {total} Teilnehmenden haben ihre Anwesenheit bestätigt.
-            </div>
-            <div style={{ display: "grid", gap: 10, marginTop: 16 }}>
-              <ApiCard title="Vorab-Portal" endpoint="Fachforum, Programm, Verpflegung" />
-              <ApiCard title="Eventtag" endpoint="Separater Check-in mit Bezugsnummer oder Token" />
+      return `
+        <div style="display:grid; gap:24px;">
+          <div class="grid-header-admin">
+            ${sectionHeader("🔳 Admin-Portal", "Steuerung und Übersicht für Veranstaltungsorganisation", "Verwalten Sie Teilnehmende, Check-ins, Fachforen, Programmpunkte und Verpflegungswünsche zentral in einer Oberfläche.")}
+            <div class="card">
+              <div class="card-body-sm">
+                <div class="small muted">Live-Status ATagung 2026</div>
+                <div class="stat-value">${stats.checkedIn} / ${stats.total}</div>
+                <div class="progress-track"><div class="progress-fill" style="width:${stats.percent}%;"></div></div>
+                <div class="row" style="margin-top:16px;">
+                  <button class="btn" type="button">Export</button>
+                  <button class="btn secondary" type="button">QR-Links erzeugen</button>
+                </div>
+              </div>
             </div>
           </div>
-        </Card>
-      </div>
+          <div class="tabs segmented">
+            ${tabs.map((tab) => `<button class="${state.adminTab === tab.id ? "active" : ""}" data-admin-tab="${tab.id}">${tab.label}</button>`).join("")}
+          </div>
+          ${state.adminTab === "dashboard" ? renderDashboardTab() : ""}
+          ${state.adminTab === "participants" ? renderParticipantsTab() : ""}
+          ${state.adminTab === "diagnostics" ? renderDiagnosticsTab() : ""}
+        </div>
+      `;
+    }
 
-      <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-        <button onClick={() => switchMode("pre_event")} style={{ border: mode === "pre_event" ? "1px solid #111827" : "1px solid #d5d7da", background: mode === "pre_event" ? "#111827" : "#fff", color: mode === "pre_event" ? "#fff" : "#111827", borderRadius: 14, padding: "10px 14px", fontSize: 14, fontWeight: 600, cursor: "pointer" }}>Vorab-Auswahl</button>
-        <button onClick={() => switchMode("event_day")} style={{ border: mode === "event_day" ? "1px solid #111827" : "1px solid #d5d7da", background: mode === "event_day" ? "#111827" : "#fff", color: mode === "event_day" ? "#fff" : "#111827", borderRadius: 14, padding: "10px 14px", fontSize: 14, fontWeight: 600, cursor: "pointer" }}>Event-Check-in</button>
-      </div>
-
-      <Card>
-        <div style={{ padding: 24 }}>
-          <div style={{ fontSize: 14, color: "#6b7280" }}>Schritte</div>
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 12, marginTop: 12 }}>
-            {steps.map((item, index) => {
-              const currentIndex = steps.findIndex((stepItem) => stepItem.id === step);
-              const isCurrent = item.id === step;
-              const isDone = index < currentIndex;
-              return <div key={item.id} style={{ border: isCurrent ? "1px solid #111827" : "1px solid #e5e7eb", background: isCurrent ? "#111827" : isDone ? "#f3f4f6" : "#fff", color: isCurrent ? "#fff" : "#111827", borderRadius: 18, padding: 14, fontSize: 14, fontWeight: 600 }}>{item.label}</div>;
-            })}
+    function renderDashboardTab() {
+      const { total, checkedIn, pending, percent, lunchPackages, forumSelections, programSelections } = calculateStats(state.participants);
+      return `
+        <div style="display:grid; gap:24px;">
+          <div class="stats-grid">
+            ${statCard("Teilnehmende gesamt", total, "👥", "Importierte Datensätze für das Event")}
+            ${statCard("Bereits eingecheckt", checkedIn, "✅", "Live-Status am Einlass")}
+            ${statCard("Noch offen", pending, "🔳", "Noch nicht bestätigte Teilnahmen")}
+            ${statCard("Lunchpakete", lunchPackages, "🥪", "Aktuelle Auswahl der Teilnehmenden")}
+            ${statCard("Fachforen", forumSelections, "🧩", "Verbindlich gewählte Foren")}
+            ${statCard("Programmpunkte", programSelections, "📅", "Gebuchte Punkte im Rahmenprogramm")}
+          </div>
+          <div class="card">
+            <div class="card-body">
+              <h2>Check-in-Fortschritt</h2>
+              <div class="row-between small" style="margin-top:20px;">
+                <span class="muted">Verbindlich erfasste Anwesenheiten</span>
+                <span style="font-weight:600;">${percent}%</span>
+              </div>
+              <div class="progress-track"><div class="progress-fill" style="width:${percent}%;"></div></div>
+              <div class="info-grid" style="margin-top:20px;">
+                <div class="box"><div class="small muted">Self-Service</div><div style="margin-top:8px; font-weight:600;">Änderungen per Bezugsnummer oder Token</div></div>
+                <div class="box"><div class="small muted">Verpflegung</div><div style="margin-top:8px; font-weight:600;">Fleisch, vegetarisch, vegan und Lunchpaket</div></div>
+                <div class="box"><div class="small muted">Buchungslogik</div><div style="margin-top:8px; font-weight:600;">1 Fachforum, bis zu 5 Programmpunkte</div></div>
+                <div class="box"><div class="small muted">Export</div><div style="margin-top:8px; font-weight:600;">CSV / XLSX / PDF Anwesenheitsliste</div></div>
+              </div>
+            </div>
           </div>
         </div>
-      </Card>
+      `;
+    }
 
-      {step === "identify" && (
-        <Card>
-          <div style={{ padding: 24 }}>
-            <div style={{ fontSize: 22, fontWeight: 700, letterSpacing: "-0.02em" }}>{mode === "pre_event" ? "1. Identifikation für Vorabauswahl" : "1. Identifikation für Check-in"}</div>
-            <div style={{ marginTop: 6, fontSize: 14, color: "#6b7280" }}>
-              Bitte geben Sie Ihre Bezugsnummer oder Ihren persönlichen Link ein, um fortzufahren.
-            </div>
-            <div style={{ marginTop: 20, border: "1px solid #e5e7eb", borderRadius: 20, padding: 16 }}>
-              <div style={{ marginBottom: 12, fontSize: 14, fontWeight: 600 }}>Bezugsnummer oder Token</div>
-              <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
-                <div style={{ flex: "1 1 240px" }}><Input value={lookup} onChange={(e) => setLookup(e.target.value)} placeholder="z. B. BZ-2026-002" /></div>
-                <Button onClick={openParticipantFlow}>Weiter</Button>
+    function renderParticipantsTab() {
+      const filtered = searchParticipants(state.participants, state.participantSearch);
+      return `
+        <div class="card">
+          <div class="card-body">
+            <div class="row-between" style="align-items:center; gap:16px;">
+              <div>
+                <h2>Teilnehmerliste</h2>
+                <div class="small muted" style="margin-top:6px;">Suche, Statusprüfung und manueller Fallback am Einlass</div>
+              </div>
+              <div style="min-width:280px; flex:1 1 320px; max-width:360px;">
+                <input id="participant-search" type="search" value="${escapeAttribute(state.participantSearch)}" placeholder="Name, E-Mail, Organisation oder Bezugsnummer" />
               </div>
             </div>
-            {flowMessage && <FeedbackBox type={flowMessage.type} text={flowMessage.text} />}
+            <div class="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Bezugsnummer</th>
+                    <th>Name</th>
+                    <th>Organisation</th>
+                    <th>Verpflegung</th>
+                    <th>Status</th>
+                    <th>Zeit</th>
+                    <th style="text-align:right;">Aktion</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  ${filtered.map((participant) => `
+                    <tr>
+                      <td><div style="font-weight:600;">${participant.referenceNumber}</div></td>
+                      <td><div style="font-weight:600;">${participant.name}</div><div class="small muted" style="margin-top:4px;">${participant.email}</div></td>
+                      <td>${participant.organization}</td>
+                      <td>${participant.mealPreference}${participant.lunchPackage ? " · Lunchpaket" : ""}</td>
+                      <td>${statusBadge(participant.status)}</td>
+                      <td>${participant.checkedInAt || "—"}</td>
+                      <td style="text-align:right;"><button class="btn secondary manual-checkin" data-id="${participant.id}" ${participant.status === "checked_in" ? "disabled" : ""}>${participant.status === "checked_in" ? "Erfasst" : "Manuell einchecken"}</button></td>
+                    </tr>
+                  `).join("")}
+                </tbody>
+              </table>
+            </div>
           </div>
-        </Card>
-      )}
-
-      {step === "checkin" && currentParticipant && (
-        <Card>
-          <div style={{ padding: 24 }}>
-            <div style={{ fontSize: 22, fontWeight: 700, letterSpacing: "-0.02em" }}>2. Check-in</div>
-            <div style={{ marginTop: 6, fontSize: 14, color: "#6b7280" }}>Bitte bestätigen Sie Ihre Anwesenheit für die Tagung.</div>
-            <div style={{ marginTop: 20, border: "1px solid #e5e7eb", borderRadius: 20, padding: 20 }}>
-              <div style={{ fontSize: 14, color: "#6b7280" }}>Willkommen</div>
-              <div style={{ marginTop: 6, fontSize: 28, fontWeight: 700, letterSpacing: "-0.03em" }}>{currentParticipant.name}</div>
-              <div style={{ marginTop: 6, fontSize: 14, color: "#6b7280" }}>{currentParticipant.referenceNumber} · {currentParticipant.organization}</div>
-              <div style={{ marginTop: 16, display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
-                <StatusBadge status={currentParticipant.status} />
-                <span style={{ fontSize: 14, color: "#6b7280" }}>ATagung 2026</span>
-              </div>
-              <div style={{ display: "flex", gap: 12, flexWrap: "wrap", marginTop: 20 }}>
-                <Button onClick={confirmCheckin}>Anwesenheit bestätigen</Button>
-                <Button secondary onClick={restartFlow}>Abbrechen</Button>
-              </div>
-            </div>
-            {flowMessage && <FeedbackBox type={flowMessage.type} text={flowMessage.text} />}
-          </div>
-        </Card>
-      )}
-
-      {step === "selection" && currentParticipant && (
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))", gap: 24 }}>
-          <Card>
-            <div style={{ padding: 24 }}>
-              <div style={{ fontSize: 22, fontWeight: 700, letterSpacing: "-0.02em" }}>{mode === "pre_event" ? "2. Auswahl vorab" : "Auswahl"}</div>
-              <div style={{ marginTop: 6, fontSize: 14, color: "#6b7280" }}>Wählen Sie Ihr Fachforum, Programmpunkte und Ihre Verpflegung.</div>
-              <div style={{ marginTop: 16, border: "1px solid #e5e7eb", borderRadius: 20, padding: 20 }}>
-                <div style={{ fontSize: 14, color: "#6b7280" }}>Teilnehmer</div>
-                <div style={{ marginTop: 6, fontSize: 28, fontWeight: 700, letterSpacing: "-0.03em" }}>{currentParticipant.name}</div>
-                <div style={{ marginTop: 6, fontSize: 14, color: "#6b7280" }}>{currentParticipant.referenceNumber} · {currentParticipant.organization}</div>
-              </div>
-              <div style={{ marginTop: 16, border: "1px solid #e5e7eb", borderRadius: 20, padding: 20 }}>
-                <div style={{ fontWeight: 600 }}>Fachforum</div>
-                <div style={{ display: "grid", gap: 10, marginTop: 12 }}>{forumOptions.map((forum) => <label key={forum.id} style={optionRowStyle}><input type="radio" name="forum" checked={currentParticipant.selectedForumId === forum.id} onChange={() => updateCurrentParticipant((current) => ({ ...current, selectedForumId: forum.id }))} /><span>{forum.title}</span></label>)}</div>
-              </div>
-              <div style={{ marginTop: 16, border: "1px solid #e5e7eb", borderRadius: 20, padding: 20 }}>
-                <div style={{ fontWeight: 600 }}>Rahmenprogramm</div>
-                <div style={{ marginTop: 6, fontSize: 14, color: "#6b7280" }}>Bis zu 5 Programmpunkte auswählbar</div>
-                <div style={{ display: "grid", gap: 10, marginTop: 12 }}>{programOptions.map((program) => <label key={program.id} style={optionRowStyle}><input type="checkbox" checked={currentParticipant.selectedProgramIds.includes(program.id)} onChange={() => toggleProgramForCurrent(program.id)} /><span>{program.title}</span></label>)}</div>
-              </div>
-              <div style={{ marginTop: 16, border: "1px solid #e5e7eb", borderRadius: 20, padding: 20 }}>
-                <div style={{ fontWeight: 600 }}>Verpflegung</div>
-                <div style={{ display: "grid", gap: 10, marginTop: 12 }}>{mealOptions.map((meal) => <label key={meal} style={optionRowStyle}><input type="radio" name="mealPreference" checked={currentParticipant.mealPreference === meal} onChange={() => updateCurrentParticipant((current) => ({ ...current, mealPreference: meal }))} /><span style={{ textTransform: "capitalize" }}>{meal}</span></label>)}<label style={optionRowStyle}><input type="checkbox" checked={currentParticipant.lunchPackage} onChange={(e) => updateCurrentParticipant((current) => ({ ...current, lunchPackage: e.target.checked }))} /><span>Lunchpaket</span></label></div>
-              </div>
-              <div style={{ display: "flex", gap: 12, flexWrap: "wrap", marginTop: 16 }}>
-                <Button onClick={saveSelection}>Auswahl speichern</Button>
-                <Button secondary onClick={restartFlow}>Abbrechen</Button>
-              </div>
-              {flowMessage && <FeedbackBox type={flowMessage.type} text={flowMessage.text} />}
-            </div>
-          </Card>
-          <Card>
-            <div style={{ padding: 24 }}>
-              <div style={{ fontSize: 22, fontWeight: 700, letterSpacing: "-0.02em" }}>{mode === "pre_event" ? "Vorab-Zusammenfassung" : "Zwischenstand"}</div>
-              <div style={{ marginTop: 6, fontSize: 14, color: "#6b7280" }}>Überblick über die bisher gewählten Angaben</div>
-              <div style={{ display: "grid", gap: 14, marginTop: 20 }}>
-                <ApiCard title="Gewähltes Fachforum" endpoint={getForumLabel(currentParticipant.selectedForumId)} />
-                <ApiCard title="Rahmenprogramm" endpoint={getProgramLabels(currentParticipant.selectedProgramIds).join(", ") || "Keine Auswahl"} />
-                <ApiCard title="Verpflegung" endpoint={`${currentParticipant.mealPreference} · Lunchpaket: ${currentParticipant.lunchPackage ? "Ja" : "Nein"}`} />
-                <ApiCard title="Check-in-Status" endpoint={currentParticipant.status === "checked_in" ? `Eingecheckt um ${currentParticipant.checkedInAt}` : "Noch nicht eingecheckt"} />
-              </div>
-            </div>
-          </Card>
         </div>
-      )}
+      `;
+    }
 
-      {step === "pre_event_done" && currentParticipant && (
-        <Card>
-          <div style={{ padding: 24 }}>
-            <div style={{ fontSize: 22, fontWeight: 700, letterSpacing: "-0.02em" }}>3. Bestätigung</div>
-            <div style={{ marginTop: 6, fontSize: 14, color: "#6b7280" }}>Ihre Vorabauswahl wurde erfolgreich gespeichert.</div>
-            <div style={{ marginTop: 20, border: "1px solid #e5e7eb", borderRadius: 20, padding: 20 }}>
-              <div style={{ fontSize: 14, color: "#6b7280" }}>Vielen Dank</div>
-              <div style={{ marginTop: 6, fontSize: 28, fontWeight: 700, letterSpacing: "-0.03em" }}>{currentParticipant.name}</div>
-              <div style={{ marginTop: 16, display: "grid", gap: 14 }}>
-                <ApiCard title="Fachforum" endpoint={getForumLabel(currentParticipant.selectedForumId)} />
-                <ApiCard title="Rahmenprogramm" endpoint={getProgramLabels(currentParticipant.selectedProgramIds).join(", ") || "Keine Auswahl"} />
-                <ApiCard title="Verpflegung" endpoint={`${currentParticipant.mealPreference} · Lunchpaket: ${currentParticipant.lunchPackage ? "Ja" : "Nein"}`} />
-                <ApiCard title="Hinweis" endpoint="Der Check-in erfolgt separat am Veranstaltungstag." />
-              </div>
-              <div style={{ display: "flex", gap: 12, flexWrap: "wrap", marginTop: 20 }}>
-                <Button onClick={restartFlow}>Neuen Vorgang starten</Button>
-                <Button secondary onClick={() => setStep("selection")}>Auswahl nochmals ändern</Button>
+    function renderDiagnosticsTab() {
+      const results = runDiagnostics();
+      const passed = results.filter((item) => item.ok).length;
+      return `
+        <div class="card">
+          <div class="card-body">
+            <h2>Diagnose</h2>
+            <div class="small muted" style="margin-top:6px;">Kleine Laufzeitprüfungen für Statistik- und Suchlogik</div>
+            <div class="small" style="margin-top:16px; font-weight:600;">${passed} / ${results.length} Checks erfolgreich</div>
+            <div style="display:grid; gap:10px; margin-top:16px;">
+              ${results.map((result) => `<div class="box" style="display:flex; justify-content:space-between; gap:16px; background:${result.ok ? "#ecfdf3" : "#fef3f2"};"><span>${result.name}</span><strong>${result.ok ? "OK" : "Fehler"}</strong></div>`).join("")}
+            </div>
+          </div>
+        </div>
+      `;
+    }
+
+    function renderParticipantApp() {
+      const { checkedIn, total } = calculateStats(state.participants);
+      const steps = state.participantMode === "pre_event"
+        ? [
+            { id: "identify", label: "1. Identifikation" },
+            { id: "selection", label: "2. Auswahl vorab" },
+            { id: "pre_event_done", label: "3. Bestätigung" },
+          ]
+        : [
+            { id: "identify", label: "1. Identifikation" },
+            { id: "checkin", label: "2. Check-in" },
+            { id: "confirmation", label: "3. Bestätigung" },
+          ];
+
+      const currentParticipant = getParticipantById(state.participantCurrentId);
+
+      return `
+        <div style="display:grid; gap:24px;">
+          <div class="grid-header-participant">
+            ${sectionHeader(
+              "🎟️ Teilnehmendenportal",
+              state.participantMode === "pre_event" ? "Vorab-Auswahl für Fachforen, Programm und Verpflegung" : "Schneller Check-in am Veranstaltungstag",
+              state.participantMode === "pre_event"
+                ? "Sechs Wochen vor der Tagung wählen Teilnehmende ihr Fachforum, Rahmenprogramm und ihre Verpflegung. Der Check-in erfolgt erst separat am Veranstaltungstag."
+                : "Am Veranstaltungstag bestätigen Teilnehmende nur noch ihre Anwesenheit. Bereits gespeicherte Vorabauswahlen bleiben dabei erhalten."
+            )}
+            <div class="card">
+              <div class="card-body-sm">
+                <div class="small muted">Portalstatus</div>
+                <div class="stat-value">${state.participantMode === "pre_event" ? "Vorab offen" : "Check-in offen"}</div>
+                <div class="small muted" style="margin-top:8px; line-height:1.6;">Bereits ${checkedIn} von ${total} Teilnehmenden haben ihre Anwesenheit bestätigt.</div>
+                <div style="display:grid; gap:10px; margin-top:16px;">
+                  ${apiCard("Vorab-Portal", "Fachforum, Programm, Verpflegung")}
+                  ${apiCard("Eventtag", "Separater Check-in mit Bezugsnummer oder Token")}
+                </div>
               </div>
             </div>
-            {flowMessage && <FeedbackBox type={flowMessage.type} text={flowMessage.text} />}
           </div>
-        </Card>
-      )}
 
-      {step === "confirmation" && currentParticipant && (
-        <Card>
-          <div style={{ padding: 24 }}>
-            <div style={{ fontSize: 22, fontWeight: 700, letterSpacing: "-0.02em" }}>3. Bestätigung</div>
-            <div style={{ marginTop: 6, fontSize: 14, color: "#6b7280" }}>Ihre Anwesenheit wurde erfolgreich bestätigt.</div>
-            <div style={{ marginTop: 20, border: "1px solid #e5e7eb", borderRadius: 20, padding: 20 }}>
-              <div style={{ fontSize: 14, color: "#6b7280" }}>Vielen Dank</div>
-              <div style={{ marginTop: 6, fontSize: 28, fontWeight: 700, letterSpacing: "-0.03em" }}>{currentParticipant.name}</div>
-              <div style={{ marginTop: 16, display: "grid", gap: 14 }}>
-                <ApiCard title="Check-in" endpoint={`Bestätigt um ${currentParticipant.checkedInAt || "—"}`} />
-                <ApiCard title="Fachforum" endpoint={getForumLabel(currentParticipant.selectedForumId)} />
-                <ApiCard title="Rahmenprogramm" endpoint={getProgramLabels(currentParticipant.selectedProgramIds).join(", ") || "Keine Auswahl"} />
-                <ApiCard title="Verpflegung" endpoint={`${currentParticipant.mealPreference} · Lunchpaket: ${currentParticipant.lunchPackage ? "Ja" : "Nein"}`} />
-              </div>
-              <div style={{ display: "flex", gap: 12, flexWrap: "wrap", marginTop: 20 }}>
-                <Button onClick={restartFlow}>Neuen Vorgang starten</Button>
+          <div class="segmented">
+            <button class="${state.participantMode === "pre_event" ? "active" : ""}" data-mode="pre_event">Vorab-Auswahl</button>
+            <button class="${state.participantMode === "event_day" ? "active" : ""}" data-mode="event_day">Event-Check-in</button>
+          </div>
+
+          <div class="card">
+            <div class="card-body">
+              <div class="small muted">Schritte</div>
+              <div class="steps-grid" style="margin-top:12px;">
+                ${steps.map((item, index) => {
+                  const currentIndex = steps.findIndex((stepItem) => stepItem.id === state.participantStep);
+                  const classes = ["step"];
+                  if (item.id === state.participantStep) classes.push("current");
+                  else if (index < currentIndex) classes.push("done");
+                  return `<div class="${classes.join(" ")}">${item.label}</div>`;
+                }).join("")}
               </div>
             </div>
-            {flowMessage && <FeedbackBox type={flowMessage.type} text={flowMessage.text} />}
           </div>
-        </Card>
-      )}
-    </div>
-  );
-}
 
-const optionRowStyle = { display: "flex", alignItems: "center", gap: 10, padding: "10px 12px", border: "1px solid #e5e7eb", borderRadius: 14 };
-const thStyle = { padding: "14px 16px", fontSize: 13, color: "#6b7280", fontWeight: 600 };
-const tdStyle = { padding: "16px", verticalAlign: "top", fontSize: 14 };
+          ${renderParticipantStep(currentParticipant)}
+        </div>
+      `;
+    }
 
-export default function QRCheckinFrontendApp() {
-  const [participants, setParticipants] = useState(initialParticipants);
-  const [role, setRole] = useState("admin");
-  return (
-    <div style={{ minHeight: "100vh", background: "#f7f7f8", padding: 24, fontFamily: 'Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif', color: "#111827", boxSizing: "border-box" }}>
-      <div style={{ maxWidth: 1280, margin: "0 auto", display: "grid", gap: 24 }}>
-        <RoleSwitch role={role} setRole={setRole} />
-        {role === "admin" ? <AdminApp participants={participants} setParticipants={setParticipants} /> : <ParticipantApp participants={participants} setParticipants={setParticipants} />}
-      </div>
-    </div>
-  );
-}
+    function renderParticipantStep(currentParticipant) {
+      if (state.participantStep === "identify") {
+        return `
+          <div class="card">
+            <div class="card-body">
+              <h2>${state.participantMode === "pre_event" ? "1. Identifikation für Vorabauswahl" : "1. Identifikation für Check-in"}</h2>
+              <div class="small muted" style="margin-top:6px;">Bitte geben Sie Ihre Bezugsnummer oder Ihren persönlichen Link ein, um fortzufahren.</div>
+              <div class="box" style="margin-top:20px;">
+                <div class="small" style="margin-bottom:12px; font-weight:600;">Bezugsnummer oder Token</div>
+                <div class="row">
+                  <div style="flex:1 1 240px;"><input id="participant-lookup" type="text" value="${escapeAttribute(state.participantLookup)}" placeholder="z. B. BZ-2026-002" /></div>
+                  <button class="btn" id="participant-continue">Weiter</button>
+                </div>
+              </div>
+              ${feedbackBox(state.participantMessage)}
+            </div>
+          </div>
+        `;
+      }
+
+      if (state.participantStep === "checkin" && currentParticipant) {
+        return `
+          <div class="card">
+            <div class="card-body">
+              <h2>2. Check-in</h2>
+              <div class="small muted" style="margin-top:6px;">Bitte bestätigen Sie Ihre Anwesenheit für die Tagung.</div>
+              <div class="box-lg" style="margin-top:20px;">
+                <div class="small muted">Willkommen</div>
+                <div style="margin-top:6px; font-size:28px; font-weight:700; letter-spacing:-0.03em;">${currentParticipant.name}</div>
+                <div class="small muted" style="margin-top:6px;">${currentParticipant.referenceNumber} · ${currentParticipant.organization}</div>
+                <div class="row" style="margin-top:16px;">${statusBadge(currentParticipant.status)}<span class="small muted">ATagung 2026</span></div>
+                <div class="row" style="margin-top:20px;">
+                  <button class="btn" id="confirm-checkin">Anwesenheit bestätigen</button>
+                  <button class="btn secondary" id="restart-flow">Abbrechen</button>
+                </div>
+              </div>
+              ${feedbackBox(state.participantMessage)}
+            </div>
+          </div>
+        `;
+      }
+
+      if (state.participantStep === "selection" && currentParticipant) {
+        return `
+          <div class="two-col-grid">
+            <div class="card">
+              <div class="card-body">
+                <h2>${state.participantMode === "pre_event" ? "2. Auswahl vorab" : "Auswahl"}</h2>
+                <div class="small muted" style="margin-top:6px;">Wählen Sie Ihr Fachforum, Programmpunkte und Ihre Verpflegung.</div>
+
+                <div class="box-lg" style="margin-top:16px;">
+                  <div class="small muted">Teilnehmer</div>
+                  <div style="margin-top:6px; font-size:28px; font-weight:700; letter-spacing:-0.03em;">${currentParticipant.name}</div>
+                  <div class="small muted" style="margin-top:6px;">${currentParticipant.referenceNumber} · ${currentParticipant.organization}</div>
+                </div>
+
+                <div class="box-lg" style="margin-top:16px;">
+                  <div style="font-weight:600;">Fachforum</div>
+                  <div style="display:grid; gap:10px; margin-top:12px;">
+                    ${forumOptions.map((forum) => `
+                      <label class="option-row">
+                        <input type="radio" name="forum" data-forum-id="${forum.id}" ${currentParticipant.selectedForumId === forum.id ? "checked" : ""} />
+                        <span>${forum.title}</span>
+                      </label>
+                    `).join("")}
+                  </div>
+                </div>
+
+                <div class="box-lg" style="margin-top:16px;">
+                  <div style="font-weight:600;">Rahmenprogramm</div>
+                  <div class="small muted" style="margin-top:6px;">Bis zu 5 Programmpunkte auswählbar</div>
+                  <div style="display:grid; gap:10px; margin-top:12px;">
+                    ${programOptions.map((program) => `
+                      <label class="option-row">
+                        <input type="checkbox" data-program-id="${program.id}" ${currentParticipant.selectedProgramIds.includes(program.id) ? "checked" : ""} />
+                        <span>${program.title}</span>
+                      </label>
+                    `).join("")}
+                  </div>
+                </div>
+
+                <div class="box-lg" style="margin-top:16px;">
+                  <div style="font-weight:600;">Verpflegung</div>
+                  <div style="display:grid; gap:10px; margin-top:12px;">
+                    ${mealOptions.map((meal) => `
+                      <label class="option-row">
+                        <input type="radio" name="mealPreference" data-meal="${meal}" ${currentParticipant.mealPreference === meal ? "checked" : ""} />
+                        <span style="text-transform:capitalize;">${meal}</span>
+                      </label>
+                    `).join("")}
+                    <label class="option-row">
+                      <input type="checkbox" id="lunch-package" ${currentParticipant.lunchPackage ? "checked" : ""} />
+                      <span>Lunchpaket</span>
+                    </label>
+                  </div>
+                </div>
+
+                <div class="row" style="margin-top:16px;">
+                  <button class="btn" id="save-selection">Auswahl speichern</button>
+                  <button class="btn secondary" id="restart-flow">Abbrechen</button>
+                </div>
+                ${feedbackBox(state.participantMessage)}
+              </div>
+            </div>
+
+            <div class="card">
+              <div class="card-body">
+                <h2>${state.participantMode === "pre_event" ? "Vorab-Zusammenfassung" : "Zwischenstand"}</h2>
+                <div class="small muted" style="margin-top:6px;">Überblick über die bisher gewählten Angaben</div>
+                <div style="display:grid; gap:14px; margin-top:20px;">
+                  ${apiCard("Gewähltes Fachforum", getForumLabel(currentParticipant.selectedForumId))}
+                  ${apiCard("Rahmenprogramm", getProgramLabels(currentParticipant.selectedProgramIds).join(", ") || "Keine Auswahl")}
+                  ${apiCard("Verpflegung", `${currentParticipant.mealPreference} · Lunchpaket: ${currentParticipant.lunchPackage ? "Ja" : "Nein"}`)}
+                  ${apiCard("Check-in-Status", currentParticipant.status === "checked_in" ? `Eingecheckt um ${currentParticipant.checkedInAt}` : "Noch nicht eingecheckt")}
+                </div>
+              </div>
+            </div>
+          </div>
+        `;
+      }
+
+      if (state.participantStep === "pre_event_done" && currentParticipant) {
+        return `
+          <div class="card">
+            <div class="card-body">
+              <h2>3. Bestätigung</h2>
+              <div class="small muted" style="margin-top:6px;">Ihre Vorabauswahl wurde erfolgreich gespeichert.</div>
+              <div class="box-lg" style="margin-top:20px;">
+                <div class="small muted">Vielen Dank</div>
+                <div style="margin-top:6px; font-size:28px; font-weight:700; letter-spacing:-0.03em;">${currentParticipant.name}</div>
+                <div style="display:grid; gap:14px; margin-top:16px;">
+                  ${apiCard("Fachforum", getForumLabel(currentParticipant.selectedForumId))}
+                  ${apiCard("Rahmenprogramm", getProgramLabels(currentParticipant.selectedProgramIds).join(", ") || "Keine Auswahl")}
+                  ${apiCard("Verpflegung", `${currentParticipant.mealPreference} · Lunchpaket: ${currentParticipant.lunchPackage ? "Ja" : "Nein"}`)}
+                  ${apiCard("Hinweis", "Der Check-in erfolgt separat am Veranstaltungstag.")}
+                </div>
+                <div class="row" style="margin-top:20px;">
+                  <button class="btn" id="restart-flow">Neuen Vorgang starten</button>
+                  <button class="btn secondary" id="back-to-selection">Auswahl nochmals ändern</button>
+                </div>
+              </div>
+              ${feedbackBox(state.participantMessage)}
+            </div>
+          </div>
+        `;
+      }
+
+      if (state.participantStep === "confirmation" && currentParticipant) {
+        return `
+          <div class="card">
+            <div class="card-body">
+              <h2>3. Bestätigung</h2>
+              <div class="small muted" style="margin-top:6px;">Ihre Anwesenheit wurde erfolgreich bestätigt.</div>
+              <div class="box-lg" style="margin-top:20px;">
+                <div class="small muted">Vielen Dank</div>
+                <div style="margin-top:6px; font-size:28px; font-weight:700; letter-spacing:-0.03em;">${currentParticipant.name}</div>
+                <div style="display:grid; gap:14px; margin-top:16px;">
+                  ${apiCard("Check-in", `Bestätigt um ${currentParticipant.checkedInAt || "—"}`)}
+                  ${apiCard("Fachforum", getForumLabel(currentParticipant.selectedForumId))}
+                  ${apiCard("Rahmenprogramm", getProgramLabels(currentParticipant.selectedProgramIds).join(", ") || "Keine Auswahl")}
+                  ${apiCard("Verpflegung", `${currentParticipant.mealPreference} · Lunchpaket: ${currentParticipant.lunchPackage ? "Ja" : "Nein"}`)}
+                </div>
+                <div class="row" style="margin-top:20px;">
+                  <button class="btn" id="restart-flow">Neuen Vorgang starten</button>
+                </div>
+              </div>
+              ${feedbackBox(state.participantMessage)}
+            </div>
+          </div>
+        `;
+      }
+
+      return "";
+    }
+
+    function runDiagnostics() {
+      const stats = calculateStats(state.participants);
+      const results = [];
+      results.push({ name: "Stats count total participants", ok: stats.total === 5 });
+      results.push({ name: "Stats count checked-in participants", ok: stats.checkedIn === 2 });
+      results.push({ name: "Search finds Sofia Becker", ok: searchParticipants(state.participants, "sofia").length === 1 });
+      results.push({ name: "Search empty query returns all", ok: searchParticipants(state.participants, "").length === state.participants.length });
+      results.push({ name: "Progress percentage is valid", ok: stats.percent >= 0 && stats.percent <= 100 });
+      results.push({ name: "Reference search finds participant", ok: findParticipantByReference(state.participants, "BZ-2026-003")?.name === "Daniel Yilmaz" });
+      results.push({ name: "Forum label resolves correctly", ok: getForumLabel("forum-2").includes("Fachforum 2") });
+      results.push({ name: "Program labels resolve correctly", ok: getProgramLabels(["prog-1", "prog-3"]).length === 2 });
+      return results;
+    }
+
+    function escapeHtml(value) {
+      return String(value)
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#39;");
+    }
+
+    function escapeAttribute(value) {
+      return escapeHtml(value);
+    }
+
+    function render() {
+      renderRoleSwitch();
+      const root = document.getElementById("app-root");
+      root.innerHTML = state.role === "admin" ? renderAdminApp() : renderParticipantApp();
+      attachEvents();
+    }
+
+    function attachEvents() {
+      document.querySelectorAll("[data-admin-tab]").forEach((btn) => {
+        btn.addEventListener("click", () => {
+          state.adminTab = btn.dataset.adminTab;
+          render();
+        });
+      });
+
+      const participantSearch = document.getElementById("participant-search");
+      if (participantSearch) {
+        participantSearch.addEventListener("input", (e) => {
+          state.participantSearch = e.target.value;
+          render();
+        });
+      }
+
+      document.querySelectorAll(".manual-checkin").forEach((btn) => {
+        btn.addEventListener("click", () => {
+          const id = btn.dataset.id;
+          updateParticipant(id, (participant) => ({ ...participant, status: "checked_in", checkedInAt: formatNowTime() }));
+          render();
+        });
+      });
+
+      document.querySelectorAll("[data-mode]").forEach((btn) => {
+        btn.addEventListener("click", () => {
+          state.participantMode = btn.dataset.mode;
+          state.participantStep = "identify";
+          state.participantLookup = "";
+          state.participantCurrentId = null;
+          state.participantMessage = null;
+          render();
+        });
+      });
+
+      const participantLookup = document.getElementById("participant-lookup");
+      if (participantLookup) {
+        participantLookup.addEventListener("input", (e) => {
+          state.participantLookup = e.target.value;
+        });
+      }
+
+      const participantContinue = document.getElementById("participant-continue");
+      if (participantContinue) {
+        participantContinue.addEventListener("click", () => {
+          const match = findParticipantByReference(state.participants, state.participantLookup);
+          if (!match) {
+            state.participantCurrentId = null;
+            state.participantMessage = { type: "error", text: "Keine passende Bezugsnummer oder kein passender Token gefunden." };
+            render();
+            return;
+          }
+          state.participantCurrentId = match.id;
+          state.participantMessage = null;
+          state.participantStep = state.participantMode === "pre_event"
+            ? "selection"
+            : match.status === "checked_in"
+              ? "confirmation"
+              : "checkin";
+          render();
+        });
+      }
+
+      const restartButtons = document.querySelectorAll("#restart-flow");
+      restartButtons.forEach((btn) => {
+        btn.addEventListener("click", () => {
+          state.participantLookup = "";
+          state.participantCurrentId = null;
+          state.participantMessage = null;
+          state.participantStep = "identify";
+          render();
+        });
+      });
+
+      const confirmCheckin = document.getElementById("confirm-checkin");
+      if (confirmCheckin) {
+        confirmCheckin.addEventListener("click", () => {
+          const current = getParticipantById(state.participantCurrentId);
+          if (!current) return;
+          if (current.status === "checked_in") {
+            state.participantStep = "confirmation";
+            render();
+            return;
+          }
+          const updatedTime = formatNowTime();
+          updateParticipant(current.id, (participant) => ({ ...participant, status: "checked_in", checkedInAt: updatedTime }));
+          state.participantMessage = { type: "success", text: `Anwesenheit erfolgreich bestätigt für ${current.name}.` };
+          state.participantStep = "confirmation";
+          render();
+        });
+      }
+
+      document.querySelectorAll("[data-forum-id]").forEach((input) => {
+        input.addEventListener("change", () => {
+          const id = state.participantCurrentId;
+          if (!id) return;
+          updateParticipant(id, (participant) => ({ ...participant, selectedForumId: input.dataset.forumId }));
+          render();
+        });
+      });
+
+      document.querySelectorAll("[data-program-id]").forEach((input) => {
+        input.addEventListener("change", () => {
+          const id = state.participantCurrentId;
+          const current = getParticipantById(id);
+          if (!id || !current) return;
+          const programId = input.dataset.programId;
+          const exists = current.selectedProgramIds.includes(programId);
+          const nextProgramIds = exists
+            ? current.selectedProgramIds.filter((item) => item !== programId)
+            : [...current.selectedProgramIds, programId];
+          if (nextProgramIds.length > 5) {
+            state.participantMessage = { type: "warning", text: "Es können maximal 5 Programmpunkte ausgewählt werden." };
+            render();
+            return;
+          }
+          state.participantMessage = null;
+          updateParticipant(id, (participant) => ({ ...participant, selectedProgramIds: nextProgramIds }));
+          render();
+        });
+      });
+
+      document.querySelectorAll("[data-meal]").forEach((input) => {
+        input.addEventListener("change", () => {
+          const id = state.participantCurrentId;
+          if (!id) return;
+          updateParticipant(id, (participant) => ({ ...participant, mealPreference: input.dataset.meal }));
+          render();
+        });
+      });
+
+      const lunchPackage = document.getElementById("lunch-package");
+      if (lunchPackage) {
+        lunchPackage.addEventListener("change", () => {
+          const id = state.participantCurrentId;
+          if (!id) return;
+          updateParticipant(id, (participant) => ({ ...participant, lunchPackage: lunchPackage.checked }));
+          render();
+        });
+      }
+
+      const saveSelection = document.getElementById("save-selection");
+      if (saveSelection) {
+        saveSelection.addEventListener("click", () => {
+          state.participantMessage = {
+            type: "success",
+            text: state.participantMode === "pre_event" ? "Ihre Vorabauswahl wurde gespeichert." : "Ihre Auswahl wurde gespeichert.",
+          };
+          state.participantStep = state.participantMode === "pre_event" ? "pre_event_done" : "confirmation";
+          render();
+        });
+      }
+
+      const backToSelection = document.getElementById("back-to-selection");
+      if (backToSelection) {
+        backToSelection.addEventListener("click", () => {
+          state.participantStep = "selection";
+          render();
+        });
+      }
+    }
+
+    render();
+  </script>
+</body>
+</html>
